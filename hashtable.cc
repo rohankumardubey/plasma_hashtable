@@ -3,7 +3,7 @@
 
 HashTable::HashTable(int nb, const string &filepath) :DataSize(0) {
     numBuckets = nb;
-    maxSegments = 89999;
+    maxSegments = 10000;
     bucketDir = new HTBucketInfo[nb];
     log = new Log();
     auto space = log->ReserveSpace(4096);
