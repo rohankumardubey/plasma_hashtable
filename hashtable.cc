@@ -4,6 +4,7 @@
 HashTable::HashTable(int nb, const string &filepath) :DataSize(0) {
     numBuckets = nb;
     maxSegments = 10000;
+    numHashes = 3; // 5 bytes filter, 15 % false positives
     bucketDir = new HTBucketInfo[nb];
     log = new Log();
     auto space = log->ReserveSpace(4096);
@@ -13,6 +14,14 @@ HashTable::HashTable(int nb, const string &filepath) :DataSize(0) {
 bytes HashTable::Get(const bytes &key, Buffer &b) {
     auto h = hash(key);
     auto bInfo = &bucketDir[h % numBuckets];
+
+#ifdef USE_BLOOMFILTER
+    BloomFilter bloom(static_cast<void *>(&bInfo->bloom), 5, numHashes);
+
+    if (!bloom.Test(key)) {
+        return bytes();
+    }
+#endif
 
     LookupKVCallback cb(key);
 
@@ -62,7 +71,14 @@ void HashTable::writeHTData(int id, HTBucketInfo *bInfo, vector<kv> &kvs, int ma
     DedupKVCallback cb;
     HTBucketInfo head = *bInfo;
 
+#ifdef USE_BLOOMFILTER
+    BloomFilter bloom(static_cast<void *>(&bInfo->bloom), 4, numHashes);
+#endif
+
     if (bInfo->segments > maxSegments) {
+#ifdef USE_BLOOMFILTER
+        bloom.Reset();
+#endif
         head = HTBucketInfo();
         head.offset = 0;
         head.version = bInfo->version+1;
@@ -92,6 +108,9 @@ void HashTable::writeHTData(int id, HTBucketInfo *bInfo, vector<kv> &kvs, int ma
 
     for (auto x: kvs) {
         offset = copyKV(space.Buffer, offset, x.k, x.v);
+#ifdef USE_BLOOMFILTER
+        bloom.Add(x.k);
+#endif
     }
 
     log->FinalizeWrite(space);

@@ -9,6 +9,9 @@
 #include "common.h"
 #include "log.h"
 #include "murmurhash3.h"
+#include "bloom.h"
+
+//#define USE_BLOOMFILTER
 
 using namespace std;
 
@@ -17,8 +20,11 @@ struct HTBucketInfo {
     uint8_t segments;
     uint8_t version;
     uint8_t count;
+    // 5 bytes bloom filter
+    uint8_t bloom;
+    uint32_t _bloom;
 
-    HTBucketInfo() :offset(0), count(0), segments(0){}
+    HTBucketInfo() :offset(0), count(0), segments(0), bloom(0), _bloom(0) {}
 };
 
 struct HTData {
@@ -67,6 +73,7 @@ private:
 
     int numBuckets;
     int maxSegments;
+    int numHashes;
     HTBucketInfo *bucketDir;
     Log *log;
 
