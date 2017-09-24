@@ -21,7 +21,28 @@ struct LogSpace{
 
 class Log {
 public:
-    Log();
+    virtual ~Log() {}
+
+    virtual LogSpace ReserveSpace(int size) = 0;
+
+    virtual void FinalizeWrite(LogSpace &s) = 0;
+
+    virtual bytes Read(LogOffset off, Buffer &b) = 0;
+
+    virtual bytes Read(LogOffset off, int n, Buffer &b, int &blkSz) = 0;
+
+    virtual void TrimLog(LogOffset off) = 0;
+
+    virtual LogOffset HeadOffset() = 0;
+
+    virtual LogOffset TailOffset() = 0;
+};
+
+class InMemoryLog: public Log {
+public:
+    InMemoryLog();
+
+    ~InMemoryLog();
 
     LogSpace ReserveSpace(int size);
 
@@ -34,8 +55,8 @@ public:
     void TrimLog(LogOffset off);
 
     LogOffset HeadOffset();
-    LogOffset TailOffset();
 
+    LogOffset TailOffset();
 private:
     char *logBuf;
     uint64_t head, tail;
