@@ -1,6 +1,8 @@
 #pragma once
 
 #include <iostream>
+#include <mutex>
+#include <condition_variable>
 #include <string.h>
 #include "common.h"
 
@@ -61,4 +63,41 @@ private:
     char *logBuf;
     uint64_t head, tail;
     uint64_t phyHead;
+};
+
+class PersistentLog: public Log {
+public:
+    PersistentLog(string filepath, int wbsize);
+
+    ~PersistentLog();
+
+    LogSpace ReserveSpace(int size);
+
+    void FinalizeWrite(LogSpace &s);
+
+    bytes Read(LogOffset off, Buffer &b);
+
+    bytes Read(LogOffset off, int n, Buffer &b, int &blkSz);
+
+    void TrimLog(LogOffset off);
+
+    LogOffset HeadOffset();
+
+    LogOffset TailOffset();
+
+private:
+    void writeBuf();
+
+    int fd;
+    char *buf;
+    int bufSize;
+    uint64_t bufOffset;
+
+    atomic<uint64_t> head, tail;
+    atomic<uint64_t> phyHead, phyTail;
+
+    mutex m;
+    condition_variable cond;
+    bool bufClosed;
+    int rc;
 };
