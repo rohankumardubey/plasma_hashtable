@@ -48,24 +48,32 @@ void bytes_free(const bytes &s);
 
 struct Buffer {
     int size;
-    char *buf;
+    void *buf;
 
     Buffer() :size(0), buf(nullptr) {}
 
     bytes Alloc(int n) {
         if (n > size) {
             auto size2 = n*2;
-            auto buf2 = new char[size2];
-            delete [] buf;
+            auto buf2 = malloc(size2);
+            free(buf);
             size = size2;
             buf = buf2;
         }
 
-        return bytes{buf, n};
+        return bytes{reinterpret_cast<char*>(buf), n};
+    }
+
+    bytes Resize(int n) {
+        if (n > size) {
+            buf = realloc(buf, n);
+            size = n;
+        }
+        return bytes{reinterpret_cast<char*>(buf), size};
     }
 
     ~Buffer() {
-        delete [] buf;
+        free(buf);
     }
 };
 
