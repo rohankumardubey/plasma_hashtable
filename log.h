@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <mutex>
+#include <atomic>
 #include <condition_variable>
 #include <string.h>
 #include "common.h"
