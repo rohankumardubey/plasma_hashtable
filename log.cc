@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-InMemoryLog::InMemoryLog() :head(0), tail(0), phyHead(0) {
+InMemoryLog::InMemoryLog() :head(LOG_BEGIN_OFFSET), tail(LOG_BEGIN_OFFSET), phyHead(LOG_BEGIN_OFFSET) {
     logBuf = static_cast<char *>(mmap(0, LOG_MAXSIZE, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0));
 }
 
@@ -49,7 +49,7 @@ void InMemoryLog::TrimLog(LogOffset off) {
     if (diff) {
         auto n = diff*LOG_RECLAIM_SIZE;
         auto r = madvise(logBuf+phyHead, n, MADV_DONTNEED);
-        assert(r > 0);
+        assert(r == 0);
 
         phyHead += n;
     }
@@ -64,10 +64,10 @@ int logBlockSize(int size) {
 }
 
 PersistentLog::PersistentLog(string filepath, int wbsize) {
-    head = 0;
-    tail = 0;
-    phyHead = 0;
-    phyTail = 0;
+    head = LOG_BEGIN_OFFSET;
+    tail = LOG_BEGIN_OFFSET;
+    phyHead = LOG_BEGIN_OFFSET;
+    phyTail = LOG_BEGIN_OFFSET;
 
     bufSize = wbsize;
     bufOffset = 0;
@@ -82,6 +82,7 @@ PersistentLog::PersistentLog(string filepath, int wbsize) {
 LogSpace PersistentLog::ReserveSpace(int size) {
     unique_lock<std::mutex> lock(m);
 
+    tail += logBlockHeaderSize + size;
     while (true) {
         // Buffer has space, allocate
         if (bufOffset + size + logBlockHeaderSize < bufSize) {
@@ -90,7 +91,6 @@ LogSpace PersistentLog::ReserveSpace(int size) {
             rc++;
             uint32_t *blockLen = reinterpret_cast<uint32_t*>(buf+allocOffset);
             *blockLen = static_cast<uint32_t>(size);
-            tail = phyTail + bufOffset;
             return LogSpace{phyTail+allocOffset, buf+allocOffset+logBlockHeaderSize};
         // Write out the buffer if it has no users
         } else if (rc == 0) {
@@ -120,7 +120,7 @@ void PersistentLog::FinalizeWrite(LogSpace &s) {
     }
 }
 
-bytes PersistentLog::Read(LogOffset off, Buffer &b) {
+bytes PersistentLog::Read(LogOffset off, int n, Buffer &b, int &blockLen) {
     // Data is in the memory buffer
     // Perform optimistic read
     do {
@@ -128,13 +128,17 @@ bytes PersistentLog::Read(LogOffset off, Buffer &b) {
         if (off >= phyOff) {
             auto bs = b.Alloc(logBlockHeaderSize);
             memcpy(bs.data, buf+off-phyOff, bs.size);
-            uint32_t blockLen = *reinterpret_cast<uint32_t*>(bs.data);
+            blockLen = static_cast<int>(*reinterpret_cast<uint32_t*>(bs.data));
+
+            if (!n) {
+                n = blockLen;
+            }
 
             // Block len could be invalid as we do not use any synchronization
             // Verify it before proceeding
-            if (off + blockLen <= phyOff + bufSize) {
-		    bs = b.Alloc(blockLen);
-		    memcpy(bs.data, buf+off-phyOff+logBlockHeaderSize, blockLen);
+            if (off + n <= phyOff + bufSize) {
+		    bs = b.Alloc(n);
+		    memcpy(bs.data, buf+off-phyOff+logBlockHeaderSize, n);
 		    if (phyOff == phyTail) {
 			return bs;
 		    }
@@ -145,7 +149,7 @@ bytes PersistentLog::Read(LogOffset off, Buffer &b) {
     // Data is in the persistent log
     auto alignOff = (off / 4096)*4096;
     auto rdSize = 4096;
-    if (alignOff+rdSize < off+logBlockHeaderSize) {
+    while (alignOff+rdSize < off+logBlockHeaderSize+n) {
         rdSize += 4096;
     }
 
@@ -153,8 +157,11 @@ bytes PersistentLog::Read(LogOffset off, Buffer &b) {
     auto r = pread(fd, buf.data, buf.size, alignOff);
     assert(r >= 0);
 
-    uint32_t *blockLen = reinterpret_cast<uint32_t*>(buf.data + off%4096);
-    auto n = static_cast<int>(*blockLen);
+    blockLen = static_cast<int>(*reinterpret_cast<uint32_t*>(buf.data + off%4096));
+    if (!n) {
+        n = blockLen;
+    }
+
     auto remaining = off+logBlockHeaderSize+n - alignOff+rdSize;
     if (remaining > 0) {
         buf = b.Resize(buf.size + remaining);
@@ -165,21 +172,9 @@ bytes PersistentLog::Read(LogOffset off, Buffer &b) {
     return bytes{buf.data+off%4096+logBlockHeaderSize, n};
 }
 
-
-bytes PersistentLog::Read(LogOffset off, int n, Buffer &b, int &blkSz) {
-    auto alignOff = (off / 4096)*4096;
-    auto rdSize = 4096;
-    if (alignOff+rdSize < off+logBlockHeaderSize+n) {
-        rdSize += 4096;
-    }
-
-    auto buf = b.Alloc(rdSize);
-    auto r = pread(fd, buf.data, buf.size, alignOff);
-    assert(r >= 0);
-
-    uint32_t *blockLen = reinterpret_cast<uint32_t*>(buf.data + off%4096);
-    blkSz = static_cast<int>(*blockLen);
-    return bytes{buf.data+off%4096+logBlockHeaderSize, n};
+bytes PersistentLog::Read(LogOffset off, Buffer &b) {
+    int _;
+    return Read(off, 0, b, _);
 }
 
 void PersistentLog::TrimLog(LogOffset off) {
@@ -202,7 +197,7 @@ LogOffset PersistentLog::HeadOffset(){
 }
 
 LogOffset PersistentLog::TailOffset() {
-    return phyTail;
+    return tail;
 }
 
 PersistentLog::~PersistentLog() {
