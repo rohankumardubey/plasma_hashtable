@@ -60,6 +60,7 @@ struct Buffer {
         if (n > size) {
             auto size2 = n*2;
             void *buf2;
+
             auto r = posix_memalign(&buf2, ALIGN_SIZE, ALIGN_SIZE * (size2/ALIGN_SIZE)+ ALIGN_SIZE);
             assert(r == 0);
             free(buf);

@@ -74,11 +74,15 @@ PersistentLog::PersistentLog(string filepath, int wbsize) {
     bufOffset = 0;
     bufClosed = false;
     rc = 0;
+    int flags = O_RDWR | O_CREAT | O_SYNC;
 
-    fd = open(filepath.c_str(), O_RDWR | O_CREAT | O_SYNC, 0755);
+#ifdef __linux__
+    flags |= O_DIRECT;
+#endif
+
+    fd = open(filepath.c_str(), flags, 0755);
     assert(fd > 0);
-    buf = new char[wbsize];
-    auto r = posix_memalign((void **) &buf, ALIGN_SIZE, wbsize);
+    auto r = posix_memalign(reinterpret_cast<void **>(&buf), ALIGN_SIZE, bufSize);
     assert(r == 0);
 }
 
@@ -111,6 +115,7 @@ void PersistentLog::writeBuf() {
     if (bufOffset < bufSize) {
             int32_t *blockLen = reinterpret_cast<int32_t*>(buf+bufOffset);
             *blockLen = -static_cast<int32_t>(bufSize-bufOffset-logBlockHeaderSize);
+            bufOffset += bufSize-bufOffset;
     }
 
     auto r = pwrite(fd, static_cast<void*>(buf), bufSize, phyTail);
@@ -179,6 +184,9 @@ bytes PersistentLog::Read(LogOffset off, int n, Buffer &b, int &blockLen) {
 
     auto remaining = off+logBlockHeaderSize+n - alignOff+rdSize;
     if (remaining > 0) {
+        if (remaining % 4096) {
+            remaining = 4096*(remaining/4096) + 4096;
+        }
         buf = b.Resize(buf.size + remaining);
         auto r = pread(fd, buf.data+rdSize, remaining, alignOff+rdSize);
         assert(r >= 0);
