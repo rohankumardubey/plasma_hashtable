@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <atomic>
 #include <sys/mman.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -77,6 +78,8 @@ PersistentLog::PersistentLog(string filepath, int wbsize) {
     fd = open(filepath.c_str(), O_RDWR | O_CREAT | O_SYNC, 0755);
     assert(fd > 0);
     buf = new char[wbsize];
+    auto r = posix_memalign((void **) &buf, ALIGN_SIZE, wbsize);
+    assert(r == 0);
 }
 
 LogSpace PersistentLog::ReserveSpace(int size) {
@@ -213,6 +216,6 @@ LogOffset PersistentLog::TailOffset() {
 }
 
 PersistentLog::~PersistentLog() {
-    delete buf;
+    free(buf);
     close(fd);
 }

@@ -2,10 +2,14 @@
 
 #include "murmurhash3.h"
 #include <string.h>
+#include <stdlib.h>
+#include <assert.h>
 #include <iostream>
 #include <ostream>
 
 using namespace std;
+
+const int ALIGN_SIZE = 4096;
 
 struct bytes {
     char *data;
@@ -55,7 +59,9 @@ struct Buffer {
     bytes Alloc(int n) {
         if (n > size) {
             auto size2 = n*2;
-            auto buf2 = malloc(size2);
+            void *buf2;
+            auto r = posix_memalign(&buf2, ALIGN_SIZE, ALIGN_SIZE * (size2/ALIGN_SIZE)+ ALIGN_SIZE);
+            assert(r == 0);
             free(buf);
             size = size2;
             buf = buf2;
@@ -67,6 +73,14 @@ struct Buffer {
     bytes Resize(int n) {
         if (n > size) {
             buf = realloc(buf, n);
+            if (reinterpret_cast<uintptr_t>(buf) % ALIGN_SIZE != 0) {
+                void *buf2;
+                auto r = posix_memalign(&buf2, ALIGN_SIZE, ALIGN_SIZE * (n/ALIGN_SIZE)+ ALIGN_SIZE);
+                assert(r == 0);
+                memcpy(buf2, buf, size);
+                free(buf);
+                buf = buf2;
+            }
             size = n;
         }
         return bytes{reinterpret_cast<char*>(buf), size};
