@@ -183,6 +183,13 @@ void HashTable::compactLog(float fragThreshold, Buffer &b) {
     auto offset = log->HeadOffset();
     while (GetLogFragmentation() > fragThreshold) {
         auto block = log->Read(offset, sizeof(HTData), b, n);
+
+        // Ignore padding block
+        if (n < 0) {
+            offset += logBlockSize(-n);
+            continue;
+        }
+
         HTData *header = (HTData*)(block.data);
         if (!header->nextOffset) {
             auto bInfo = &bucketDir[header->bucketID];
