@@ -15,9 +15,9 @@ void randKey(char *buf, int len) {
 }
 
 void testbench_hashtable() {
-    auto n = 10000000;
+    auto n = 1000000;
     Buffer b;
-    HashTable ht(1000000, "test.data");
+    HashTable ht(100000, "");
 
     std::chrono::time_point<std::chrono::system_clock> start, end;
     char *buf = new char[64];
@@ -28,6 +28,7 @@ void testbench_hashtable() {
     for (auto i=0; i<n;i++) {
         randKey(buf, 64);
         auto key = bytes(buf, 64);
+        //ht.Get(key,b);
         ht.Set(key, key);
         if (i%1000000==0) {
             ht.Stats();

@@ -6,8 +6,11 @@ HashTable::HashTable(int nb, const string &filepath) :DataSize(0) {
     maxSegments = 8;
     numHashes = 3; // 5 bytes filter, 15 % false positives
     bucketDir = new HTBucketInfo[nb];
-    //log = new PersistentLog("test.data", 1024*1024);
-    log = new InMemoryLog();
+    if (filepath == "") {
+        log = new InMemoryLog();
+    } else {
+        log = new PersistentLog(filepath, WRITE_BUFFER_SIZE);
+    }
 }
 
 bytes HashTable::Get(const bytes &key, Buffer &b) {

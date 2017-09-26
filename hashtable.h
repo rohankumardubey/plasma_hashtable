@@ -11,7 +11,8 @@
 #include "murmurhash3.h"
 #include "bloom.h"
 
-//#define USE_BLOOMFILTER
+#define USE_BLOOMFILTER
+#define WRITE_BUFFER_SIZE 1024*1024
 
 using namespace std;
 
