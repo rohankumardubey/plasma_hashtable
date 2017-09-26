@@ -3,7 +3,7 @@
 
 HashTable::HashTable(int nb, const string &filepath) :DataSize(0) {
     numBuckets = nb;
-    maxSegments = 8;
+    maxSegments = 2;
     numHashes = 3; // 5 bytes filter, 15 % false positives
     bucketDir = new HTBucketInfo[nb];
     if (filepath == "") {
